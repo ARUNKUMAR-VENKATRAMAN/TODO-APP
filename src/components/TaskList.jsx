@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 
-const API_URL = 'http://localhost:5000/api/contacts'
+// const API_URL = 'http://localhost:5000/api/contacts' 
+const API_URL = 'https://todo-app-2-4264.onrender.com/api/contacts' 
 
 const ContactList = ()=>{
   const [contacts, setContacts] = useState([])
