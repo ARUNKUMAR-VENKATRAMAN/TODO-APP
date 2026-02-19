@@ -12,17 +12,12 @@ const ContactList = ()=>{
   const [showEditModal, setShowEditModal] = useState(false)
   const [contactToDelete, setContactToDelete] = useState(null)
   const [contactToEdit, setContactToEdit] = useState(null)
-  const [editName, setEditName] = useState('')
-  const [editEmail, setEditEmail] = useState('')
-  const [editPhoneNo, setEditPhoneNo] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [validationErrors, setValidationErrors] = useState({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Fetch contacts from backend on component mount
-  useEffect(() => {
-    fetchContacts()
-  }, [])
+  useEffect(() => { fetchContacts() }, [])
 
   const fetchContacts = async () => {
     try {
@@ -34,311 +29,187 @@ const ContactList = ()=>{
       setContacts(data)
     } catch (err) {
       setError('Failed to load contacts. Please check if the server is running.')
-      console.error('Error fetching contacts:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  // Validation function
   const validateContact = (name, email, phoneNo) => {
     const errors = {}
-    
-    // Name validation
-    if (!name.trim()) {
-      errors.name = 'Name is required'
-    }
-    
-    // Email validation
-    if (!email.trim()) {
-      errors.email = 'Email is required'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      errors.email = 'Invalid email format'
-    }
-    
-    // Phone number validation - only digits, min 10 digits
-    if (!phoneNo.trim()) {
-      errors.phoneNo = 'Phone number is required'
-    } else if (!/^\d{10,15}$/.test(phoneNo.trim())) {
-      errors.phoneNo = 'Phone number must contain only 10-15 digits'
-    }
-    
+    if (!name.trim()) errors.name = 'Name is required'
+    if (!email.trim()) { errors.email = 'Email is required' }
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { errors.email = 'Invalid email format' }
+    if (!phoneNo.trim()) { errors.phoneNo = 'Phone number is required' }
+    else if (!/^\d{10,15}$/.test(phoneNo.trim())) { errors.phoneNo = 'Phone number must contain only 10-15 digits' }
     return errors
   }
 
-  // Handle phone input to allow only numbers
-  const handlePhoneInput = (value) => {
-    // Remove any non-digit characters
-    const numbersOnly = value.replace(/\D/g, '')
-    setPhoneNo(numbersOnly)
-  }
-
-  // Handle edit phone input to allow only numbers
-  const handleEditPhoneInput = (value) => {
-    // Remove any non-digit characters
-    const numbersOnly = value.replace(/\D/g, '')
-    setEditPhoneNo(numbersOnly)
-  }
+  const handlePhoneInput = (value) => setPhoneNo(value.replace(/\D/g, ''))
 
   const handleAddContact = async () => {
-    // Validate inputs
     const errors = validateContact(name, email, phoneNo)
     setValidationErrors(errors)
-    
-    // If there are validation errors, don't proceed
-    if (Object.keys(errors).length > 0) {
-      setError('Please fix the validation errors')
-      return
-    }
-
+    if (Object.keys(errors).length > 0) { setError('Please fix the validation errors'); return }
     try {
       setError(null)
+      setIsSubmitting(true)
       const response = await fetch(API_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          name: name.trim(), 
-          email: email.trim(), 
-          phoneNo: phoneNo.trim() 
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), phoneNo: phoneNo.trim() }),
       })
-
       if (!response.ok) throw new Error('Failed to add contact')
-      
       const newContact = await response.json()
       setContacts([...contacts, newContact])
-      setName('')
-      setEmail('')
-      setPhoneNo('')
-      setValidationErrors({})
+      setName(''); setEmail(''); setPhoneNo(''); setValidationErrors({})
     } catch (err) {
       setError('Failed to add contact')
-      console.error('Error adding contact:', err)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const openDeleteModal = (contact) => {
-    setContactToDelete(contact)
-    setShowDeleteModal(true)
-  }
+  const openDeleteModal = (contact) => { setContactToDelete(contact); setShowDeleteModal(true) }
 
   const confirmDelete = async () => {
-    if (contactToDelete) {
-      try {
-        setError(null)
-        const response = await fetch(`${API_URL}/${contactToDelete._id}`, {
-          method: 'DELETE',
-        })
-
-        if (!response.ok) throw new Error('Failed to delete contact')
-        
-        setContacts(contacts.filter(contact => contact._id !== contactToDelete._id))
-      } catch (err) {
-        setError('Failed to delete contact')
-        console.error('Error deleting contact:', err)
-      }
+    if (!contactToDelete) return
+    setIsSubmitting(true)
+    try {
+      setError(null)
+      const response = await fetch(`${API_URL}/${contactToDelete._id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Failed to delete contact')
+      setContacts(contacts.filter(contact => contact._id !== contactToDelete._id))
+    } catch (err) {
+      setError('Failed to delete contact: ' + err.message)
+    } finally {
+      setIsSubmitting(false); setShowDeleteModal(false); setContactToDelete(null)
     }
-    setShowDeleteModal(false)
-    setContactToDelete(null)
   }
 
-  const cancelDelete = () => {
-    setShowDeleteModal(false)
-    setContactToDelete(null)
-  }
-
-  const openEditModal = (contact) => {
-    setContactToEdit(contact)
-    setEditName(contact.name)
-    setEditEmail(contact.email)
-    setEditPhoneNo(contact.phoneNo)
-    setShowEditModal(true)
-  }
-
-  const confirmEdit = async () => {
-    // Validate inputs
-    const errors = validateContact(editName, editEmail, editPhoneNo)
-    
-    // If there are validation errors, don't proceed
-    if (Object.keys(errors).length > 0) {
-      setError('Please fix the validation errors: ' + Object.values(errors).join(', '))
-      return
-    }
-
-    if (contactToEdit) {
-      try {
-        setError(null)
-        const response = await fetch(`${API_URL}/${contactToEdit._id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            name: editName.trim(), 
-            email: editEmail.trim(), 
-            phoneNo: editPhoneNo.trim() 
-          }),
-        })
-
-        if (!response.ok) throw new Error('Failed to update contact')
-        
-        const updatedContact = await response.json()
-        setContacts(contacts.map(contact => 
-          contact._id === contactToEdit._id ? updatedContact : contact
-        ))
-      } catch (err) {
-        setError('Failed to update contact')
-        console.error('Error updating contact:', err)
-      }
-    }
-    setShowEditModal(false)
-    setContactToEdit(null)
-    setEditName('')
-    setEditEmail('')
-    setEditPhoneNo('')
-  }
-
-  const cancelEdit = () => {
-    setShowEditModal(false)
-    setContactToEdit(null)
-    setEditName('')
-    setEditEmail('')
-    setEditPhoneNo('')
-  }
+  const cancelDelete = () => { setShowDeleteModal(false); setContactToDelete(null) }
+  const openEditModal = (contact) => { setContactToEdit(contact); setShowEditModal(true) }
+  const closeEditModal = () => { setShowEditModal(false); setContactToEdit(null) }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Title */}
-        <div className="text-center mb-6 sm:mb-8">
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-linear-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-            CONTACT DETAILS
-          </h1>
-          <p className="text-gray-600 text-sm sm:text-base lg:text-lg">Manage your contacts efficiently</p>
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-mono">
+
+      {/* Header */}
+      <div className="border-b border-gray-200 bg-white px-8 py-5 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+          <span className="text-xs tracking-[0.3em] uppercase text-gray-500">Contact Management</span>
         </div>
+        <span className="text-xs text-gray-400 tracking-widest">CONTACTS — v1.0</span>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col gap-10">
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm sm:text-base">
-            {error}
+          <div className="bg-red-50 border border-red-300 text-red-600 px-4 py-3 rounded text-xs tracking-wide flex justify-between items-center">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 font-bold ml-4">×</button>
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
-          {/* Input Section */}
-          <div className="bg-linear-to-r from-blue-500 to-purple-500 p-4 sm:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="sm:col-span-2 lg:col-span-1">
+        {/* Form Panel */}
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <h2 className="text-sm tracking-[0.2em] uppercase text-gray-500">— New Contact</h2>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] tracking-[0.25em] uppercase text-gray-400">Full Name</label>
                 <input
-                  type="text"
-                  value={name}
+                  type="text" placeholder="Enter full name" value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter Your Name"
-                  className={`w-full px-4 sm:px-5 py-2.5 sm:py-3 bg-white border-2 ${validationErrors.name ? 'border-red-500' : 'border-transparent'} rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-white shadow-lg text-gray-800 placeholder-gray-400 text-sm sm:text-base`}
+                  className={`bg-gray-50 border text-gray-800 text-sm px-4 py-2.5 rounded focus:outline-none focus:border-emerald-500 focus:bg-white placeholder:text-gray-300 transition-colors ${validationErrors.name ? 'border-red-400' : 'border-gray-300'}`}
                 />
-                {validationErrors.name && (
-                  <p className="text-red-200 text-xs sm:text-sm mt-1 ml-1">{validationErrors.name}</p>
-                )}
+                {validationErrors.name && <p className="text-red-500 text-[10px] mt-0.5">{validationErrors.name}</p>}
               </div>
-              <div className="sm:col-span-2 lg:col-span-1">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] tracking-[0.25em] uppercase text-gray-400">Email Address</label>
                 <input
-                  type="email"
-                  value={email}
+                  type="email" placeholder="Enter email address" value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter Your Email"
-                  className={`w-full px-4 sm:px-5 py-2.5 sm:py-3 bg-white border-2 ${validationErrors.email ? 'border-red-500' : 'border-transparent'} rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-white shadow-lg text-gray-800 placeholder-gray-400 text-sm sm:text-base`}
+                  className={`bg-gray-50 border text-gray-800 text-sm px-4 py-2.5 rounded focus:outline-none focus:border-emerald-500 focus:bg-white placeholder:text-gray-300 transition-colors ${validationErrors.email ? 'border-red-400' : 'border-gray-300'}`}
                 />
-                {validationErrors.email && (
-                  <p className="text-red-200 text-xs sm:text-sm mt-1 ml-1">{validationErrors.email}</p>
-                )}
+                {validationErrors.email && <p className="text-red-500 text-[10px] mt-0.5">{validationErrors.email}</p>}
               </div>
-              <div className="sm:col-span-2 lg:col-span-1">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] tracking-[0.25em] uppercase text-gray-400">Phone Number</label>
                 <input
-                  type="tel"
-                  value={phoneNo}
+                  type="tel" placeholder="Enter phone number" value={phoneNo} maxLength="15"
                   onChange={(e) => handlePhoneInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddContact()}
-                  placeholder="Enter Your Number"
-                  maxLength="15"
-                  className={`w-full px-4 sm:px-5 py-2.5 sm:py-3 bg-white border-2 ${validationErrors.phoneNo ? 'border-red-500' : 'border-transparent'} rounded-lg focus:outline-none focus:ring-2 focus:ring-white focus:border-white shadow-lg text-gray-800 placeholder-gray-400 text-sm sm:text-base`}
+                  className={`bg-gray-50 border text-gray-800 text-sm px-4 py-2.5 rounded focus:outline-none focus:border-emerald-500 focus:bg-white placeholder:text-gray-300 transition-colors ${validationErrors.phoneNo ? 'border-red-400' : 'border-gray-300'}`}
                 />
-                {validationErrors.phoneNo && (
-                  <p className="text-red-200 text-xs sm:text-sm mt-1 ml-1">{validationErrors.phoneNo}</p>
-                )}
+                {validationErrors.phoneNo && <p className="text-red-500 text-[10px] mt-0.5">{validationErrors.phoneNo}</p>}
               </div>
+            </div>
+            <div className="flex justify-end">
               <button
-                onClick={handleAddContact}
-                disabled={loading}
-                className="sm:col-span-2 lg:col-span-1 px-6 sm:px-8 py-2.5 sm:py-3 bg-white text-white-600 rounded-lg hover:bg-gray-100 font-semibold shadow-lg transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                onClick={handleAddContact} disabled={loading || isSubmitting}
+                className="px-5 py-2 text-xs tracking-widest uppercase bg-emerald-600 hover:bg-emerald-500 text-white rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Add Contact
+                {isSubmitting ? 'Adding...' : '+ Add Contact'}
               </button>
             </div>
           </div>
+        </div>
 
-          {/* Desktop Table View */}
+        {/* Table Panel */}
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <h2 className="text-sm tracking-[0.2em] uppercase text-gray-500">— All Contacts</h2>
+            <span className="text-xs text-gray-400">{contacts.length} entries</span>
+          </div>
+
+          {/* Desktop Table */}
           <div className="hidden lg:block overflow-x-auto">
             {loading && contacts.length === 0 ? (
               <div className="text-center py-16">
-                <div className="text-gray-400 text-6xl mb-4">⏳</div>
-                <p className="text-gray-500 text-xl font-medium">Loading contacts...</p>
+                <p className="text-gray-400 text-xs tracking-widest uppercase">Loading contacts...</p>
               </div>
             ) : (
-              <>
-                <table className="w-full">
-                  <thead className="bg-linear-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    {['#', 'Name', 'Email', 'Phone No', 'Actions'].map(col => (
+                      <th key={col} className="px-5 py-3 text-left text-[10px] tracking-[0.25em] uppercase text-gray-400 font-normal">{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.length === 0 && !loading ? (
                     <tr>
-                      <th className="px-6 py-4 text-left font-bold text-gray-700 w-24">S.No</th>
-                      <th className="px-6 py-4 text-left font-bold text-gray-700">Name</th>
-                      <th className="px-6 py-4 text-left font-bold text-gray-700">Email</th>
-                      <th className="px-6 py-4 text-left font-bold text-gray-700">Phone No</th>
-                      <th className="px-6 py-4 text-left font-bold text-gray-700 w-64">Actions</th>
+                      <td colSpan={5} className="px-5 py-12 text-center text-gray-400 text-xs tracking-widest uppercase">No contacts found</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {contacts.map((contact, index) => (
-                      <tr key={contact._id} className="border-b border-gray-200 hover:bg-blue-50 transition-colors duration-150">
-                        <td className="px-6 py-5 text-gray-700 font-medium">{index + 1}</td>
-                        <td className="px-6 py-5">
-                          <span className="text-gray-800">{contact.name}</span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className="text-gray-800">{contact.email}</span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className="text-gray-800">{contact.phoneNo}</span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="flex gap-3">
+                  ) : (
+                    contacts.map((contact, index) => (
+                      <tr key={contact._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td className="px-5 py-3.5 text-gray-400 text-xs">{String(index + 1).padStart(2, '0')}</td>
+                        <td className="px-5 py-3.5 text-gray-800 font-medium">{contact.name}</td>
+                        <td className="px-5 py-3.5 text-gray-500">{contact.email}</td>
+                        <td className="px-5 py-3.5 text-gray-500">{contact.phoneNo}</td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex gap-2">
                             <button
-                              onClick={() => openEditModal(contact)}
-                              className="px-5 py-2 bg-yellow-400 text-gray-900 rounded-lg hover:bg-yellow-500 font-semibold shadow-md transform hover:scale-105 transition-all duration-200"
-                            >
-                              Edit
-                            </button>
+                              onClick={() => openEditModal(contact)} disabled={isSubmitting}
+                              className="px-3 py-1.5 text-[10px] tracking-widest uppercase bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >Edit</button>
                             <button
-                              onClick={() => openDeleteModal(contact)}
-                              className="px-5 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold shadow-md transform hover:scale-105 transition-all duration-200"
-                            >
-                              Delete
-                            </button>
+                              onClick={() => openDeleteModal(contact)} disabled={isSubmitting}
+                              className="px-3 py-1.5 text-[10px] tracking-widest uppercase bg-red-50 hover:bg-red-100 text-red-500 border border-red-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >Delete</button>
                           </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {contacts.length === 0 && !loading && (
-                  <div className="text-center py-16">
-                    <div className="text-gray-400 text-6xl mb-4">👤</div>
-                    <p className="text-gray-500 text-xl font-medium">No contacts yet!</p>
-                    <p className="text-gray-400 mt-2">Add your first contact above to get started</p>
-                  </div>
-                )}
-              </>
+                    ))
+                  )}
+                </tbody>
+              </table>
             )}
           </div>
 
@@ -346,54 +217,33 @@ const ContactList = ()=>{
           <div className="lg:hidden">
             {loading && contacts.length === 0 ? (
               <div className="text-center py-16">
-                <div className="text-gray-400 text-5xl mb-4">⏳</div>
-                <p className="text-gray-500 text-lg font-medium">Loading contacts...</p>
+                <p className="text-gray-400 text-xs tracking-widest uppercase">Loading contacts...</p>
               </div>
             ) : contacts.length === 0 && !loading ? (
               <div className="text-center py-16">
-                <div className="text-gray-400 text-5xl mb-4">👤</div>
-                <p className="text-gray-500 text-lg font-medium">No contacts yet!</p>
-                <p className="text-gray-400 mt-2 text-sm">Add your first contact above to get started</p>
+                <p className="text-gray-400 text-xs tracking-widest uppercase">No contacts found</p>
               </div>
             ) : (
-              <div className="p-4 space-y-4">
+              <div className="p-4 space-y-3">
                 {contacts.map((contact, index) => (
-                  <div key={contact._id} className="bg-white border-2 border-gray-200 rounded-xl p-4 shadow-md hover:shadow-lg transition-shadow duration-200">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">#{index + 1}</span>
-                          <h3 className="text-lg font-bold text-gray-800">{contact.name}</h3>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-sm text-gray-700 break-all">{contact.email}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                            </svg>
-                            <span className="text-sm text-gray-700">{contact.phoneNo}</span>
-                          </div>
-                        </div>
-                      </div>
+                  <div key={contact._id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-bold text-gray-400 tracking-widest">#{String(index + 1).padStart(2, '0')}</span>
+                      <h3 className="text-sm font-medium text-gray-800">{contact.name}</h3>
                     </div>
-                    <div className="flex gap-2 mt-4">
+                    <div className="space-y-1 mb-3">
+                      <p className="text-xs text-gray-500">{contact.email}</p>
+                      <p className="text-xs text-gray-500">{contact.phoneNo}</p>
+                    </div>
+                    <div className="flex gap-2 pt-3 border-t border-gray-100">
                       <button
-                        onClick={() => openEditModal(contact)}
-                        className="flex-1 px-4 py-2 bg-yellow-400 text-gray-900 rounded-lg hover:bg-yellow-500 font-semibold shadow-md transition-all duration-200 text-sm"
-                      >
-                        Edit
-                      </button>
+                        onClick={() => openEditModal(contact)} disabled={isSubmitting}
+                        className="flex-1 py-1.5 text-[10px] tracking-widest uppercase bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >Edit</button>
                       <button
-                        onClick={() => openDeleteModal(contact)}
-                        className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold shadow-md transition-all duration-200 text-sm"
-                      >
-                        Delete
-                      </button>
+                        onClick={() => openDeleteModal(contact)} disabled={isSubmitting}
+                        className="flex-1 py-1.5 text-[10px] tracking-widest uppercase bg-red-50 hover:bg-red-100 text-red-500 border border-red-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >Delete</button>
                     </div>
                   </div>
                 ))}
@@ -404,114 +254,145 @@ const ContactList = ()=>{
       </div>
 
       {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 transform animate-scale-in">
-            <div className="text-center mb-6">
-              <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-7 h-7 sm:w-8 sm:h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+      {showDeleteModal && contactToDelete && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) cancelDelete() }}
+        >
+          <div className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-md w-full p-6 sm:p-8">
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-2 h-2 rounded-full bg-red-400"></div>
+                <h2 className="text-sm tracking-[0.2em] uppercase text-gray-600">— Delete Contact</h2>
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Delete Contact</h2>
-              <p className="text-sm sm:text-base text-gray-600 mb-2">Are you sure you want to delete this contact?</p>
-              {contactToDelete && (
-                <div className="text-gray-800 font-semibold bg-gray-100 px-4 py-3 rounded-lg space-y-1 text-sm sm:text-base">
-                  <p className="text-left break-all"><span className="text-gray-600">Name:</span> {contactToDelete.name}</p>
-                  <p className="text-left break-all"><span className="text-gray-600">Email:</span> {contactToDelete.email}</p>
-                  <p className="text-left"><span className="text-gray-600">Phone:</span> {contactToDelete.phoneNo}</p>
-                </div>
-              )}
+              <p className="text-xs text-gray-400 tracking-wide mb-4">Are you sure you want to delete this contact? This action cannot be undone.</p>
+              <div className="bg-gray-50 border border-gray-200 rounded px-4 py-3 space-y-1.5 text-xs">
+                <p className="text-gray-700"><span className="text-gray-400 tracking-widest uppercase text-[10px]">Name</span><span className="mx-2 text-gray-300">—</span>{contactToDelete.name}</p>
+                <p className="text-gray-700 break-all"><span className="text-gray-400 tracking-widest uppercase text-[10px]">Email</span><span className="mx-2 text-gray-300">—</span>{contactToDelete.email}</p>
+                <p className="text-gray-700"><span className="text-gray-400 tracking-widest uppercase text-[10px]">Phone</span><span className="mx-2 text-gray-300">—</span>{contactToDelete.phoneNo}</p>
+              </div>
             </div>
             <div className="flex gap-3">
               <button
-                onClick={cancelDelete}
-                className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold transition-colors duration-200 text-sm sm:text-base"
-              >
-                Cancel
-              </button>
+                onClick={cancelDelete} disabled={isSubmitting}
+                className="flex-1 px-4 py-2.5 text-xs tracking-widest uppercase bg-gray-100 hover:bg-gray-200 text-gray-600 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >Cancel</button>
               <button
-                onClick={confirmDelete}
-                className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 font-semibold transition-colors duration-200 text-sm sm:text-base"
-              >
-                Delete
-              </button>
+                onClick={confirmDelete} disabled={isSubmitting}
+                className="flex-1 px-4 py-2.5 text-xs tracking-widest uppercase bg-red-50 hover:bg-red-100 text-red-500 border border-red-200 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >{isSubmitting ? 'Deleting...' : 'Delete'}</button>
             </div>
           </div>
         </div>
       )}
 
       {/* Edit Modal */}
-      {showEditModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 transform animate-scale-in">
-            <div className="mb-6">
-              <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-7 h-7 sm:w-8 sm:h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
+      {showEditModal && contactToEdit && (
+        <EditContactModal
+          key={contactToEdit._id}
+          contact={contactToEdit}
+          onClose={closeEditModal}
+          onSave={(updatedContact) => {
+            setContacts(contacts.map(c => c._id === updatedContact._id ? updatedContact : c))
+            closeEditModal()
+          }}
+          apiUrl={API_URL}
+        />
+      )}
+    </div>
+  )
+}
+
+const EditContactModal = ({ contact, onClose, onSave, apiUrl }) => {
+  const [formData, setFormData] = useState({ name: '', email: '', phoneNo: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (contact) setFormData({ name: contact.name || '', email: contact.email || '', phoneNo: contact.phoneNo || '' })
+  }, [contact])
+
+  const handleChange = (field, value) => {
+    if (field === 'phoneNo') value = value.replace(/\D/g, '')
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const validateContact = (name, email, phoneNo) => {
+    const errors = {}
+    if (!name.trim()) errors.name = 'Name is required'
+    if (!email.trim()) { errors.email = 'Email is required' }
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { errors.email = 'Invalid email format' }
+    if (!phoneNo.trim()) { errors.phoneNo = 'Phone number is required' }
+    else if (!/^\d{10,15}$/.test(phoneNo.trim())) { errors.phoneNo = 'Phone number must contain only 10-15 digits' }
+    return errors
+  }
+
+  const handleSave = async () => {
+    const errors = validateContact(formData.name, formData.email, formData.phoneNo)
+    if (Object.keys(errors).length > 0) { setError('Please fix: ' + Object.values(errors).join(', ')); return }
+    setIsSubmitting(true); setError(null)
+    try {
+      const response = await fetch(`${apiUrl}/${contact._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: formData.name.trim(), email: formData.email.trim(), phoneNo: formData.phoneNo.trim() }),
+      })
+      if (!response.ok) throw new Error('Failed to update contact')
+      const updatedContact = await response.json()
+      onSave(updatedContact)
+    } catch (err) {
+      setError('Failed to update: ' + err.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose() }}
+    >
+      <div className="bg-white border border-gray-200 rounded-lg shadow-xl max-w-md w-full p-6 sm:p-8">
+        <div className="mb-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+            <h2 className="text-sm tracking-[0.2em] uppercase text-gray-600">— Edit Contact</h2>
+            <span className="text-xs px-2 py-1 bg-blue-50 text-blue-500 border border-blue-200 rounded ml-auto">Editing Mode</span>
+          </div>
+          {error && (
+            <div className="bg-red-50 border border-red-300 text-red-500 px-3 py-2 rounded mb-4 text-xs tracking-wide">{error}</div>
+          )}
+          <div className="space-y-3">
+            {[
+              { field: 'name', label: 'Full Name', type: 'text', placeholder: 'Enter full name' },
+              { field: 'email', label: 'Email Address', type: 'email', placeholder: 'Enter email address' },
+              { field: 'phoneNo', label: 'Phone Number (10–15 digits)', type: 'tel', placeholder: 'Enter phone number' },
+            ].map(({ field, label, type, placeholder }) => (
+              <div key={field} className="flex flex-col gap-1">
+                <label className="text-[10px] tracking-[0.25em] uppercase text-gray-400">{label}</label>
+                <input
+                  type={type} value={formData[field]} placeholder={placeholder}
+                  maxLength={field === 'phoneNo' ? '15' : undefined}
+                  disabled={isSubmitting} autoFocus={field === 'name'}
+                  onChange={(e) => handleChange(field, e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !isSubmitting) { e.preventDefault(); handleSave() } }}
+                  className="bg-gray-50 border border-gray-300 text-gray-800 text-sm px-4 py-2.5 rounded focus:outline-none focus:border-blue-400 focus:bg-white placeholder:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                />
               </div>
-              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-4">Edit Contact</h2>
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  placeholder="Name *"
-                  className="w-full px-4 py-2.5 sm:py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 text-sm sm:text-base"
-                  autoFocus
-                />
-                <input
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  placeholder="Email *"
-                  className="w-full px-4 py-2.5 sm:py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 text-sm sm:text-base"
-                />
-                <input
-                  type="tel"
-                  value={editPhoneNo}
-                  onChange={(e) => handleEditPhoneInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && confirmEdit()}
-                  placeholder="Phone No (10-15 digits) *"
-                  maxLength="15"
-                  className="w-full px-4 py-2.5 sm:py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 text-sm sm:text-base"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={cancelEdit}
-                className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-semibold transition-colors duration-200 text-sm sm:text-base"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmEdit}
-                className="flex-1 px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold transition-colors duration-200 text-sm sm:text-base"
-              >
-                Save
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-      )}
-
-      <style>{`
-        @keyframes scale-in {
-          from {
-            transform: scale(0.9);
-            opacity: 0;
-          }
-          to {
-            transform: scale(1);
-            opacity: 1;
-          }
-        }
-        .animate-scale-in {
-          animation: scale-in 0.2s ease-out;
-        }
-      `}</style>
+        <div className="flex gap-3">
+          <button
+            type="button" onClick={onClose} disabled={isSubmitting}
+            className="flex-1 px-4 py-2.5 text-xs tracking-widest uppercase bg-gray-100 hover:bg-gray-200 text-gray-600 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >Cancel</button>
+          <button
+            type="button" onClick={handleSave} disabled={isSubmitting}
+            className="flex-1 px-4 py-2.5 text-xs tracking-widest uppercase bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >{isSubmitting ? 'Saving...' : 'Save Record'}</button>
+        </div>
+      </div>
     </div>
   )
 }
